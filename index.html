@@ -313,25 +313,34 @@ async function ocrBox(im,cx,cy,hw,hh){
         for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=qx+dx,ny=qy+dy;
           if(nx<0||ny<0||nx>=sw||ny>=sh)continue;const r=ny*sw+nx;if(ink[r]&&!lab[r]){lab[r]=id;stack.push(r);}}}
       if(y1-y0+1<0.3*th&&x1-x0+1<0.35*th&&y0>miny+0.55*th&&cnt>=3)dot=true;}}
-  const T=28,sc=T/th,pad=18;
   const src=document.createElement("canvas");src.width=tw;src.height=th;
   const sctx=src.getContext("2d");const id2=sctx.createImageData(tw,th);
   for(let y=0;y<th;y++)for(let x=0;x<tw;x++){const v=ink[(y+miny)*sw+x+minx]?0:255,i=(y*tw+x)*4;id2.data[i]=id2.data[i+1]=id2.data[i+2]=v;id2.data[i+3]=255;}
   sctx.putImageData(id2,0,0);
-  const big=document.createElement("canvas");big.width=Math.round(tw*sc)+pad*2;big.height=T+pad*2;
-  const bx=big.getContext("2d");bx.fillStyle="#fff";bx.fillRect(0,0,big.width,big.height);bx.imageSmoothingEnabled=true;
-  bx.drawImage(src,pad,pad,Math.round(tw*sc),T);
-  const {data}=await worker.recognize(big,{},{blocks:true,text:true});
-  let conf=100,txt="";
-  (data.blocks||[]).forEach(bk=>(bk.paragraphs||[]).forEach(pg=>(pg.lines||[]).forEach(ln=>(ln.words||[]).forEach(wd=>{
-    if(!wd.text.trim())return;txt+=wd.text.trim();conf=Math.min(conf,wd.confidence);}))));
-  txt=txt.replace(/[^0-9.]/g,"");
-  if(!txt||conf<70)return {o:null,why:"unread"};
-  if(dot&&!txt.includes(".")&&txt.length>=2)txt=txt[0]+"."+txt.slice(1);
-  if(!dot&&txt.includes("."))return {o:null,why:"unread"};
-  if(/\..*\./.test(txt))return {o:null,why:"unread"};
-  const o=parseFloat(txt);
-  return o>=1&&o<1000?{o}:{o:null,why:"unread"};
+  // read the text scaled to T px tall
+  async function rec(T){
+    const sc=T/th,pad=18;
+    const big=document.createElement("canvas");big.width=Math.round(tw*sc)+pad*2;big.height=T+pad*2;
+    const bx=big.getContext("2d");bx.fillStyle="#fff";bx.fillRect(0,0,big.width,big.height);bx.imageSmoothingEnabled=true;
+    bx.drawImage(src,pad,pad,Math.round(tw*sc),T);
+    const {data}=await worker.recognize(big,{},{blocks:true,text:true});
+    let conf=100,txt="";
+    (data.blocks||[]).forEach(bk=>(bk.paragraphs||[]).forEach(pg=>(pg.lines||[]).forEach(ln=>(ln.words||[]).forEach(wd=>{
+      if(!wd.text.trim())return;txt+=wd.text.trim();conf=Math.min(conf,wd.confidence);}))));
+    txt=txt.replace(/[^0-9.]/g,"");
+    if(!txt)return {o:null,conf:0};
+    if(dot&&!txt.includes(".")&&txt.length>=2)txt=txt[0]+"."+txt.slice(1);
+    if(!dot&&txt.includes("."))return {o:null,conf:0};
+    if(/\..*\./.test(txt))return {o:null,conf:0};
+    const o=parseFloat(txt);
+    return o>=1&&o<1000?{o,conf}:{o:null,conf:0};
+  }
+  const r1=await rec(28);
+  if(r1.o&&r1.conf>=70)return {o:r1.o};
+  // not sure: read again at two other sizes and accept a value that comes out the same at least twice
+  const votes=[r1,await rec(22),await rec(36)].filter(r=>r.o&&r.conf>=45);
+  for(const r of votes)if(votes.filter(q=>q.o===r.o).length>=2)return {o:r.o};
+  return {o:null,why:"unread"};
 }
 
 // find the table in one screenshot by its blue frame, then by its row / column labels
