@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="連贏分注">
+<meta name="theme-color" content="#0e6a45">
+<title>連贏分注計</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Noto+Sans+HK:wght@400;500;700&display=swap">
+<style>
+/* Layout: one narrow column like a betting slip — screenshot, banker, legs, odds, stake, result board */
+:root{
+  --bg:#eef2ec; --paper:#fbfcf9; --fg:#14211a; --muted:#5d6b62; --line:#d3dccf;
+  --turf:#0e6a45; --turf-ink:#ffffff; --amber:#b77b00; --amber-ink:#ffffff; --bad:#b3261e;
+  --board:#13261c; --board-fg:#f4f1d9; --board-dim:#a9b8a6;
+  --f-num:"Big Shoulders Display","Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"Noto Sans HK","PingFang HK","Microsoft JhengHei",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0d1511; --paper:#15201a; --fg:#e7eee6; --muted:#9aab9f; --line:#2a3a30;
+  --turf:#36a874; --turf-ink:#06140d; --amber:#e3a92b; --amber-ink:#1a1100; --bad:#ff8a80;
+  --board:#07100b; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.wrap{max-width:560px;margin:0 auto;padding-inline:16px;padding-block:18px 40px;display:flex;flex-direction:column;gap:14px}
+h1{font-family:var(--f-num);font-weight:800;font-size:34px;letter-spacing:.02em;margin:0;line-height:1}
+h1 small{font-family:var(--f-body);font-size:14px;font-weight:500;color:var(--muted);letter-spacing:0;margin-left:6px}
+h2{font-size:13px;font-weight:700;letter-spacing:.08em;color:var(--muted);margin:0 0 10px;display:flex;align-items:baseline;gap:8px}
+h2 .step{font-family:var(--f-num);font-size:18px;color:var(--turf);letter-spacing:0}
+section{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input[type=number]{font:inherit;font-size:16px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px}
+.btn{font:inherit;font-weight:700;border-radius:8px;padding:9px 14px;cursor:pointer;border:1px solid var(--turf);background:var(--turf);color:var(--turf-ink);display:inline-block}
+.btn.ghost{background:transparent;color:var(--turf)}
+.btn.small{padding:5px 10px;font-size:13px}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0)}
+.shot{display:flex;gap:12px;align-items:center}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap}
+.shot img{width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+.note{font-size:13px;color:var(--muted);margin:8px 0 0}
+.status{font-size:13px;margin-top:8px}
+.status.err{color:var(--bad)}
+.status.ok{color:var(--turf)}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;width:0;background:var(--turf);transition:width .2s}
+.pad{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.pad button{font-family:var(--f-num);font-size:22px;font-weight:600;padding:6px 0;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer;font-variant-numeric:tabular-nums}
+.pad button[aria-pressed="true"]{background:var(--turf);border-color:var(--turf);color:var(--turf-ink)}
+#banker button[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
+.pad button:disabled{opacity:.25;cursor:default}
+.legs{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.legs th{font-size:12px;font-weight:500;color:var(--muted);text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+.legs td{padding:5px 6px;border-bottom:1px solid var(--line)}
+.legs .combo{font-family:var(--f-num);font-size:22px;font-weight:600}
+.legs .where{display:block;font-family:var(--f-body);font-size:11px;font-weight:400;color:var(--muted);line-height:1.2}
+.legs th.r,.legs td.r{text-align:right}
+.legs td.stake{font-family:var(--f-num);font-size:24px;font-weight:800;color:var(--amber)}
+.legs td.ret{font-family:var(--f-num);font-size:20px;font-weight:600}
+.legs tfoot td{font-family:var(--f-num);font-size:20px;font-weight:800;border-bottom:0}
+.legs input{width:70px;text-align:right;font-family:var(--f-num);font-size:20px;font-weight:600;padding:4px 8px}
+.legs input.miss{border-color:var(--bad)}
+.field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.field input{width:120px;font-family:var(--f-num);font-size:20px;font-weight:600}
+.board{background:var(--board);color:var(--board-fg);border:0}
+.board h2,.board .note{color:var(--board-dim)}
+.board h2 .step{color:#ffd36a}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.kpi span{display:block;font-size:12px;color:var(--board-dim)}
+.kpi b{font-family:var(--f-num);font-size:30px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
+.kpi b.neg{color:#ff9b8f}.kpi b.pos{color:#8ef0b9}
+.slip{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.slip th{font-size:12px;color:var(--board-dim);font-weight:500;text-align:right;padding:4px;border-bottom:1px solid #2f4637}
+.slip th:first-child,.slip td:first-child{text-align:left}
+.slip td{text-align:right;padding:6px 4px;border-bottom:1px solid #22362a;font-family:var(--f-num);font-size:20px;font-weight:600}
+.slip td.stake{color:#ffd36a;font-size:24px}
+.warn{background:#5a1d17;color:#ffd9d4;border-radius:6px;padding:8px 10px;font-size:13px;margin-top:10px}
+.scroll{overflow-x:auto}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.pad button{display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.pad button small{font-family:var(--f-body);font-size:11px;font-weight:500;opacity:.85;min-height:12px}
+.pad button.out{text-decoration:line-through}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:auto}
+.seg button{border:0;background:transparent;color:var(--fg);padding:5px 12px;font:inherit;font-size:13px;letter-spacing:0;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--turf);color:var(--turf-ink);font-weight:700}
+#banker.box button[aria-pressed="true"]{background:var(--turf);border-color:var(--turf);color:var(--turf-ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>連贏 DUTCHING<small>膽拖 / 複式分注</small></h1>
+    <p class="note" style="margin-top:6px">揀膽拖或者複式，按賠率分注碼，令任何一個組合中都收差唔多嘅錢。</p>
+  </header>
+
+  <section>
+    <h2><span class="step">1</span>連贏賠率截圖</h2>
+    <div class="shot">
+      <label class="btn" for="file">揀截圖</label>
+      <input id="file" type="file" accept="image/*" multiple class="vh">
+      <div id="thumbs" class="thumbs"></div>
+    </div>
+    <div class="bar" id="bar" hidden><i></i></div>
+    <div class="status" id="status" role="status">截馬會 app 或網頁嘅「連贏」賠率表，要見到成個格仔表連藍色邊。多過 14 匹馬可以揀 2 張圖（左邊一張、向右碌一張）。冇截圖都得，下面自己打賠率。</div>
+  </section>
+
+  <section>
+    <h2><span class="step">2</span><span id="padTitle">膽</span>
+      <span class="seg" id="mode" role="group" aria-label="玩法"><button type="button" data-v="bank" aria-pressed="true">膽拖</button><button type="button" data-v="box" aria-pressed="false">複式</button></span></h2>
+    <div class="pad" id="banker" role="group" aria-label="膽"></div>
+    <p class="note" id="boxNote" hidden></p>
+  </section>
+
+  <section id="legsSec">
+    <h2><span class="step">3</span>腳 <button class="btn ghost small" id="allLegs" type="button" style="margin-left:auto">全拖</button><button class="btn ghost small" id="noLegs" type="button">清除</button></h2>
+    <div class="pad" id="legsPad" role="group" aria-label="腳"></div>
+    <p class="note" id="legsNote">揀咗膽之後，每隻腳下面會顯示賠率。冇馬或者退出嘅會變灰。</p>
+  </section>
+
+  <section>
+    <h2><span class="step">4</span>注碼</h2>
+    <div class="row" style="gap:16px">
+      <label class="field">總注碼 ($)<input id="total" type="number" inputmode="numeric" min="10" step="10" value="1000"></label>
+      <label class="field">每注單位 ($)<input id="unit" type="number" inputmode="numeric" min="1" step="1" value="10"></label>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="step">5</span>分注</h2>
+    <div id="legsBox"></div>
+  </section>
+
+  <section class="board" aria-live="polite">
+    <h2><span class="step">✓</span>總結</h2>
+    <div id="result"></div>
+  </section>
+
+  <p class="note">賠率直到開跑前都會變，落注前再截一次圖。讀圖結果請對一對截圖。計算只供參考，落注請自行喺馬會操作。資料只留喺你部機。</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const KEY="quinella-dutch-v1";
+let S={mode:"bank",banker:null,legs:[],box:[],odds:{},total:1000,unit:10};
+try{const s=JSON.parse(localStorage.getItem(KEY)||"null");if(s){S.total=s.total||1000;S.unit=s.unit||10;if(s.mode==="box")S.mode="box";}}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({total:S.total,unit:S.unit,mode:S.mode}));}catch(e){}}
+const key=(a,b)=>Math.min(a,b)+"-"+Math.max(a,b);
+// every combo being bet, as [a,b] pairs
+function pairs(){
+  if(S.mode==="box"){const h=S.box,out=[];for(let i=0;i<h.length;i++)for(let j=i+1;j<h.length;j++)out.push([h[i],h[j]]);return out;}
+  return S.banker===null?[]:S.legs.map(l=>[S.banker,l]);
+}
+
+// cell state from the screenshot: undefined = not read yet, {o:number} | {o:null,why:"none"|"unread"|"hidden"}
+let cells={};const manual=new Set();
+let grids=[],worker=null,reading=false,pending=false;
+const maxN=()=>Math.max(14,...grids.map(g=>g.N));
+function whereText(a,b){const g=grids[0];if(!g)return "";const x=Math.min(a,b),y=Math.max(a,b);
+  if(g.layout==="app")return x<=g.C?`左邊 ${y} 行 × 底 ${x}`:`藍色 ${x} 行 × 頂 ${y}`;
+  return x<=7?`右邊 ${x} 行 × 頂 ${y}`:`左邊 ${y} 行 第 ${x-7} 格`;}
+
+// ---------- pads ----------
+function legInfo(n){
+  if(S.banker===null||n===S.banker)return {dis:true,txt:""};
+  const c=cells[key(S.banker,n)];
+  if(!c)return {dis:false,txt:grids.length&&reading?"…":""};
+  if(c.o)return {dis:false,txt:c.o<10?c.o.toFixed(1):String(c.o)};
+  if(c.why==="none")return {dis:true,txt:"",out:true};
+  if(c.why==="hidden")return {dis:false,txt:"睇唔到"};
+  return {dis:false,txt:"退?",out:true};
+}
+function buildPads(){
+  const bp=$("#banker"),lp=$("#legsPad");bp.textContent="";lp.textContent="";
+  const box=S.mode==="box";
+  bp.classList.toggle("box",box);bp.setAttribute("aria-label",box?"複式馬":"膽");
+  $("#padTitle").textContent=box?"揀馬（複式）":"膽";
+  $("#legsSec").hidden=box;
+  $("#mode").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===S.mode)));
+  const bn=$("#boxNote");bn.hidden=!box;
+  if(box){const h=S.box.length,c=h*(h-1)/2;bn.textContent=h<2?"揀最少 2 隻馬，例如 4 隻 = 6 個組合。":`${h} 隻馬複式 = ${c} 個組合。再撳一下取消。`;}
+  for(let n=1;n<=maxN();n++){
+    const b=document.createElement("button");b.type="button";b.innerHTML=`${n}<small></small>`;
+    if(box){
+      b.setAttribute("aria-pressed",String(S.box.includes(n)));
+      b.onclick=()=>{S.box=S.box.includes(n)?S.box.filter(x=>x!==n):S.box.concat(n).sort((a,b)=>a-b);buildPads();refresh();};
+    }else{
+      b.setAttribute("aria-pressed",String(S.banker===n));
+      b.onclick=()=>{S.banker=S.banker===n?null:n;S.legs=[];buildPads();refresh();};
+    }
+    bp.appendChild(b);
+    const info=legInfo(n);
+    const l=document.createElement("button");l.type="button";l.innerHTML=`${n}<small>${info.txt}</small>`;
+    l.disabled=info.dis;if(info.out)l.classList.add("out");
+    l.setAttribute("aria-pressed",String(S.legs.includes(n)));
+    l.onclick=()=>{S.legs=S.legs.includes(n)?S.legs.filter(x=>x!==n):S.legs.concat(n).sort((a,b)=>a-b);buildPads();renderLegs();calc();};
+    lp.appendChild(l);
+  }
+}
+$("#allLegs").onclick=()=>{if(S.banker===null)return;S.legs=[];
+  for(let n=1;n<=maxN();n++){if(n===S.banker)continue;const c=cells[key(S.banker,n)];
+    if(grids.length){if(c&&c.o)S.legs.push(n);}else S.legs.push(n);}
+  buildPads();renderLegs();calc();};
+$("#noLegs").onclick=()=>{S.legs=[];buildPads();renderLegs();calc();};
+$("#mode").addEventListener("click",e=>{const b=e.target.closest("button");if(!b||b.dataset.v===S.mode)return;
+  S.mode=b.dataset.v;save();buildPads();refresh();});
+
+// ---------- stakes ----------
+$("#total").value=S.total;$("#unit").value=S.unit;
+$("#total").oninput=()=>{S.total=parseFloat($("#total").value)||0;calc();save();};
+$("#unit").oninput=()=>{S.unit=parseFloat($("#unit").value)||0;calc();save();};
+const fo=o=>o<10?o.toFixed(1):String(o);
+const fmt=n=>"$"+Math.round(n).toLocaleString("en-US");
+function dutch(odds,T,U){
+  const inv=odds.reduce((a,o)=>a+1/o,0);
+  const st=odds.map(o=>Math.max(U,Math.floor(T*(1/o)/inv/U)*U));
+  let left=Math.floor((T-st.reduce((a,b)=>a+b,0))/U+1e-9);
+  while(left>0){let k=0,m=Infinity;st.forEach((x,i)=>{const r=x*odds[i];if(r<m){m=r;k=i;}});st[k]+=U;left--;}
+  return {inv,st,rets:st.map((x,i)=>x*odds[i])};
+}
+function oddsOf(k){if(manual.has(k))return S.odds[k];const c=cells[k];return c&&c.o?c.o:S.odds[k];}
+function renderLegs(){
+  const box=$("#legsBox");
+  if(S.mode==="box"){if(S.box.length<2){box.innerHTML='<p class="note" style="margin:0">喺上面揀最少 2 隻馬。</p>';return;}}
+  else{
+    if(S.banker===null){box.innerHTML='<p class="note" style="margin:0">先揀膽。</p>';return;}
+    if(!S.legs.length){box.innerHTML='<p class="note" style="margin:0">揀最少一隻腳。</p>';return;}
+  }
+  let h='<div class="scroll"><table class="legs"><thead><tr><th>組合</th><th class="r">賠率</th><th class="r">落注</th><th class="r">如中收</th></tr></thead><tbody>';
+  pairs().forEach(([a,b])=>{const k=key(a,b);
+    h+=`<tr><td class="combo">${k}<span class="where">${whereText(a,b)}</span></td>
+      <td class="r"><input type="number" inputmode="decimal" step="0.1" min="1" data-k="${k}" id="o-${k}" aria-label="${k} 賠率"></td>
+      <td class="r stake" id="s-${k}">—</td><td class="r ret" id="r-${k}">—</td></tr>`;});
+  h+='</tbody><tfoot><tr><td>合計</td><td></td><td class="r stake" id="s-total">—</td><td></td></tr></tfoot></table></div>';
+  box.innerHTML=h;
+  box.querySelectorAll("input").forEach(inp=>{const k=inp.dataset.k;const o=oddsOf(k);
+    if(o)inp.value=fo(o);else inp.classList.add("miss");
+    inp.oninput=()=>{manual.add(k);const v=parseFloat(inp.value);if(v>1)S.odds[k]=v;else delete S.odds[k];inp.classList.toggle("miss",!(v>1));calc();};});
+}
+function calc(){
+  const out=$("#result");
+  const P=pairs();
+  if(!P.length){out.innerHTML=`<p class="note" style="margin:0">${S.mode==="box"?"揀最少 2 隻馬":"揀膽同腳"}，入賠率就會計。</p>`;return;}
+  const all=P.map(([a,b])=>({k:key(a,b),o:oddsOf(key(a,b))}));
+  const combos=all.filter(c=>c.o>1),missing=all.filter(c=>!(c.o>1)).map(c=>c.k);
+  all.forEach(c=>{const a=document.getElementById("s-"+c.k),b=document.getElementById("r-"+c.k);if(a)a.textContent="—";if(b)b.textContent="—";});
+  const tot=document.getElementById("s-total");
+  const T=S.total,U=Math.max(1,S.unit||10);
+  if(!combos.length||!(T>0)){out.innerHTML=`<p class="note" style="margin:0">${!(T>0)?"入總注碼。":"入賠率就會計。"}</p>`;if(tot)tot.textContent="—";return;}
+  const {inv,st,rets}=dutch(combos.map(c=>c.o),T,U);
+  combos.forEach((c,i)=>{const a=document.getElementById("s-"+c.k),b=document.getElementById("r-"+c.k);if(a)a.textContent=fmt(st[i]);if(b)b.textContent=fmt(rets[i]);});
+  const used=st.reduce((a,b)=>a+b,0),minR=Math.min(...rets),profit=minR-used;
+  if(tot)tot.textContent=fmt(used);
+  let h=`<div class="kpis">
+    <div class="kpi"><span>總投入</span><b>${fmt(used)}</b></div>
+    <div class="kpi"><span>中咗最少收</span><b>${fmt(minR)}</b></div>
+    <div class="kpi"><span>最少淨贏</span><b class="${profit>=0?"pos":"neg"}">${profit>=0?"+":"−"}${fmt(Math.abs(profit))}</b></div></div>
+    <p class="note" style="margin:0">${combos.length} 個組合任何一個跑出，都收大約 ${fmt(minR)} 或以上。合計機率 ${(inv*100).toFixed(1)}%。</p>`;
+  if(missing.length)h+=`<div class="warn">${missing.join("、")} 未有賠率（可能已退出），未計入。如果有賠率請喺上面打返。</div>`;
+  if(inv>=1)h+=`<div class="warn">合計機率超過 100%，無論邊個中都係蝕。${S.mode==="box"?"減少馬匹":"減少腳"}或者揀賠率高啲嘅。</div>`;
+  if(used>T)h+=`<div class="warn">總注碼唔夠每個組合最少一注 $${U}，實際要投入 ${fmt(used)}。</div>`;
+  out.innerHTML=h;
+}
+function refresh(){renderLegs();calc();if(grids.length)readNow();}
+function readNow(){S.mode==="box"?readBox():readBanker();}
+
+// ---------- screenshot reading ----------
+const st=$("#status");
+function say(t,cls){st.textContent=t;st.className="status"+(cls?" "+cls:"");}
+async function getWorker(){
+  if(worker)return worker;
+  if(!window.Tesseract)throw new Error("noocr");
+  const bar=$("#bar"),fill=bar.firstElementChild;bar.hidden=false;
+  say("第一次用要下載讀圖模組，請等等…");
+  worker=await Tesseract.createWorker("eng",1,{logger:m=>{if(typeof m.progress==="number")fill.style.width=Math.round(m.progress*100)+"%";}});
+  await worker.setParameters({tessedit_pageseg_mode:"7",tessedit_char_whitelist:"0123456789."});
+  bar.hidden=true;return worker;
+}
+function loadImg(file){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(file);});}
+function median(a){const s=[...a].sort((x,y)=>x-y);const m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;}
+function runs(arr,ok,gap){const out=[];let i=0;
+  while(i<arr.length){if(ok(arr[i])){const s=i;while(i<arr.length&&ok(arr[i]))i++;
+    const last=out[out.length-1];if(last&&s-last[1]<=gap)last[1]=i;else out.push([s,i]);}else i++;}
+  return out;}
+
+// read the number inside a box centred at (cx,cy). Returns {o} | {o:null,why:"none"|"unread"}
+async function ocrBox(im,cx,cy,hw,hh){
+  const sx=Math.max(0,Math.round(cx-hw)),sy=Math.max(0,Math.round(cy-hh));
+  const sw=Math.min(Math.round(hw*2),im.naturalWidth-sx),sh=Math.min(Math.round(hh*2),im.naturalHeight-sy);
+  if(sw<4||sh<4)return {o:null,why:"none"};
+  const cv=document.createElement("canvas");cv.width=sw;cv.height=sh;
+  const ctx=cv.getContext("2d",{willReadFrequently:true});ctx.drawImage(im,sx,sy,sw,sh,0,0,sw,sh);
+  const p=ctx.getImageData(0,0,sw,sh).data;
+  const at=(x,y)=>{const i=(y*sw+x)*4;return [p[i],p[i+1],p[i+2]];};
+  const border=[];for(let x=0;x<sw;x++)border.push(at(x,0),at(x,sh-1));for(let y=0;y<sh;y++)border.push(at(0,y),at(sw-1,y));
+  const bg=[0,1,2].map(k=>median(border.map(q=>q[k])));
+  const ink=new Uint8Array(sw*sh);let n=0,minx=sw,maxx=-1,miny=sh,maxy=-1;
+  for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){const i=(y*sw+x)*4;
+    if(Math.hypot(p[i]-bg[0],p[i+1]-bg[1],p[i+2]-bg[2])>90){ink[y*sw+x]=1;n++;if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y;}}
+  if(n<sw*sh*0.01)return {o:null,why:"none"};
+  const tw=maxx-minx+1,th=maxy-miny+1;
+  // decimal point: a small blob sitting low in the text
+  let dot=false;{const lab=new Int32Array(sw*sh);let id=0;
+    for(let s=0;s<sw*sh;s++){if(!ink[s]||lab[s])continue;id++;const stack=[s];lab[s]=id;
+      let x0=sw,x1=-1,y0=sh,y1=-1,cnt=0;
+      while(stack.length){const q=stack.pop(),qx=q%sw,qy=(q/sw)|0;cnt++;
+        if(qx<x0)x0=qx;if(qx>x1)x1=qx;if(qy<y0)y0=qy;if(qy>y1)y1=qy;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=qx+dx,ny=qy+dy;
+          if(nx<0||ny<0||nx>=sw||ny>=sh)continue;const r=ny*sw+nx;if(ink[r]&&!lab[r]){lab[r]=id;stack.push(r);}}}
+      if(y1-y0+1<0.3*th&&x1-x0+1<0.35*th&&y0>miny+0.55*th&&cnt>=3)dot=true;}}
+  const T=28,sc=T/th,pad=18;
+  const src=document.createElement("canvas");src.width=tw;src.height=th;
+  const sctx=src.getContext("2d");const id2=sctx.createImageData(tw,th);
+  for(let y=0;y<th;y++)for(let x=0;x<tw;x++){const v=ink[(y+miny)*sw+x+minx]?0:255,i=(y*tw+x)*4;id2.data[i]=id2.data[i+1]=id2.data[i+2]=v;id2.data[i+3]=255;}
+  sctx.putImageData(id2,0,0);
+  const big=document.createElement("canvas");big.width=Math.round(tw*sc)+pad*2;big.height=T+pad*2;
+  const bx=big.getContext("2d");bx.fillStyle="#fff";bx.fillRect(0,0,big.width,big.height);bx.imageSmoothingEnabled=true;
+  bx.drawImage(src,pad,pad,Math.round(tw*sc),T);
+  const {data}=await worker.recognize(big,{},{blocks:true,text:true});
+  let conf=100,txt="";
+  (data.blocks||[]).forEach(bk=>(bk.paragraphs||[]).forEach(pg=>(pg.lines||[]).forEach(ln=>(ln.words||[]).forEach(wd=>{
+    if(!wd.text.trim())return;txt+=wd.text.trim();conf=Math.min(conf,wd.confidence);}))));
+  txt=txt.replace(/[^0-9.]/g,"");
+  if(!txt||conf<70)return {o:null,why:"unread"};
+  if(dot&&!txt.includes(".")&&txt.length>=2)txt=txt[0]+"."+txt.slice(1);
+  if(!dot&&txt.includes("."))return {o:null,why:"unread"};
+  if(/\..*\./.test(txt))return {o:null,why:"unread"};
+  const o=parseFloat(txt);
+  return o>=1&&o<1000?{o}:{o:null,why:"unread"};
+}
+
+// find the table in one screenshot by its blue frame, then by its row / column labels
+async function findGrid(im){
+  const W=im.naturalWidth,H=im.naturalHeight,stp=2;
+  const cv=document.createElement("canvas");cv.width=W;cv.height=H;
+  const cx=cv.getContext("2d",{willReadFrequently:true});cx.drawImage(im,0,0);
+  const p=cx.getImageData(0,0,W,H).data;
+  const isBlue=i=>{const r=p[i],g=p[i+1],b=p[i+2],lum=.3*r+.59*g+.11*b;return b-r>=30&&b-g>=20&&lum<150&&b>90;};
+  const isWhite=i=>p[i]>170&&p[i+1]>170&&p[i+2]>170;
+  const w=Math.floor(W/stp),h=Math.floor(H/stp);
+  const M=new Uint8Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(isBlue(((y*stp)*W+x*stp)*4))M[y*w+x]=1;
+  const rowf=new Float32Array(h);for(let y=0;y<h;y++){let s=0;for(let x=0;x<w;x++)s+=M[y*w+x];rowf[y]=s/w;}
+  const bands=runs(rowf,v=>v>=0.6,Math.round(h*0.012));
+  let best=null;
+  for(let i=0;i<bands.length;i++)for(let j=i+1;j<bands.length;j++){
+    const top=bands[i][1],bot=bands[j][0];if(bot-top<h*0.06)continue;
+    const colf=new Float32Array(w);
+    for(let x=0;x<w;x++){let s=0;for(let y=top;y<bot;y++)s+=M[y*w+x];colf[x]=s/(bot-top);}
+    const strips=runs(colf,v=>v>=0.85,Math.round(w*0.02));
+    const left=strips.find(s=>s[0]<w*0.25);if(!left)continue;
+    const right=strips.find(s=>s[1]>w*0.75&&s!==left)||null;
+    if(!best||bot-top>best.bot-best.top)best={top,bot,left,right,band:bands[i],bandBot:bands[j]};
+  }
+  if(!best)return null;
+  const top=best.top*stp,bot=best.bot*stp,lx=best.left[1]*stp;
+  if(best.right){ // website layout: 15 columns (0..14) x 7 rows
+    const x0=lx,x1=best.right[0]*stp,cw=(x1-x0)/15,rh=(bot-top)/7;
+    if(rh/cw<0.6||rh/cw>1.4)return null;
+    return {layout:"web",im,N:14,x0,y0:top,cw,rh};
+  }
+  // app layout: row labels in the left strip
+  const prof=[];for(let y=top;y<bot;y++){let s=0;for(let x=Math.round(W*0.007);x<lx-Math.round(W*0.007);x++)if(isWhite((y*W+x)*4))s++;prof.push(s);}
+  const lr=runs(prof,v=>v>1,3).filter(r=>r[1]-r[0]>H*0.003);
+  if(lr.length<10)return null;
+  const yc=lr.map(r=>top+(r[0]+r[1])/2);
+  const rh=median(yc.slice(1).map((y,i)=>y-yc[i]));
+  const N=lr.length+1,C=Math.ceil(N/2);
+  // bottom bar: column labels
+  const by0=bot;let by1=bot;
+  while(by1<H){let s=0,t=0;for(let x=lx;x<W;x+=4){t++;if(isBlue((by1*W+x)*4))s++;}if(s<0.5*t)break;by1++;}
+  if(by1-by0<rh*0.5)return null;
+  const profx=[];for(let x=lx;x<W;x++){let s=0;for(let y=by0+3;y<by1-3;y++)if(isWhite((y*W+x)*4))s++;profx.push(s);}
+  const cr=runs(profx,v=>v>0,Math.round(W*0.01));
+  const xc=cr.map(r=>lx+(r[0]+r[1])/2);
+  if(xc.length<3)return null;
+  const cw=median(xc.slice(1).map((x,i)=>x-xc[i]));
+  const offs=[];
+  for(let i=0;i<xc.length;i++){const r=await ocrBox(im,xc[i],(by0+by1)/2,cw*0.4,(by1-by0)*0.42);if(r.o&&Number.isInteger(r.o))offs.push(r.o-(i+1));}
+  if(!offs.length)return null;
+  const cnt={};offs.forEach(o=>cnt[o]=(cnt[o]||0)+1);
+  const off=+Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+  const colX={};xc.forEach((x,i)=>colX[i+1+off]=x);
+  return {layout:"app",im,N,C,colX,cw,rh,y4:yc[0]};
+}
+function cellCenter(g,a,b){const x=Math.min(a,b),y=Math.max(a,b);
+  if(y>g.N)return null;
+  if(g.layout==="app"){const v=x<=g.C?y+2:x-g.C,t=x<=g.C?x:y-g.C;const cx=g.colX[t];if(cx===undefined)return null;
+    return {cx,cy:g.y4+(v-4)*g.rh,hw:g.cw*0.44,hh:g.rh*0.42};}
+  const row=x<=7?x:y-7,col=x<=7?y:x-8;
+  return {cx:g.x0+(col+0.5)*g.cw,cy:g.y0+(row-0.5)*g.rh,hw:g.cw*0.44,hh:g.rh*0.42};
+}
+async function readCell(a,b){
+  let seen=false,last=null;
+  for(const g of grids){const c=cellCenter(g,a,b);if(!c)continue;seen=true;
+    const r=await ocrBox(g.im,c.cx,c.cy,c.hw,c.hh);if(r.o)return r;last=r;}
+  return seen?last:{o:null,why:"hidden"};
+}
+async function readBanker(){
+  if(!grids.length||S.mode!=="bank"||S.banker===null)return;
+  if(reading){pending=true;return;}
+  reading=true;const B=S.banker;
+  try{
+    const all=Array.from({length:maxN()},(_,i)=>i+1).filter(n=>n!==B);
+    const todo=[...S.legs,...all.filter(n=>!S.legs.includes(n))].filter(n=>!cells[key(B,n)]);
+    for(let i=0;i<todo.length;i++){
+      if(S.banker!==B||S.mode!=="bank")break;
+      say(`讀緊 ${B} 號嘅賠率（${i+1}/${todo.length}）…`);
+      const k=key(B,todo[i]);cells[k]=await readCell(B,todo[i]);
+      buildPads();
+      if(S.legs.includes(todo[i])){const inp=document.getElementById("o-"+k);
+        if(inp&&!manual.has(k)&&cells[k].o){inp.value=fo(cells[k].o);inp.classList.remove("miss");}calc();}
+    }
+    if(S.banker===B&&S.mode==="bank"){
+      const got=all.filter(n=>cells[key(B,n)]&&cells[key(B,n)].o).length;
+      const unread=all.filter(n=>cells[key(B,n)]&&cells[key(B,n)].why==="unread");
+      const hidden=all.filter(n=>cells[key(B,n)]&&cells[key(B,n)].why==="hidden");
+      let m=`讀到 ${B} 號同 ${got} 隻馬嘅連贏賠率。`;
+      if(unread.length)m+=`${unread.join("、")} 號讀唔到（可能已退出）。`;
+      if(hidden.length)m+=`${hidden.join("、")} 號唔喺截圖入面，請加多張向右碌嘅截圖。`;
+      say(m+"請對一對截圖。",hidden.length?"err":"ok");
+    }
+  }catch(e){say("讀圖出錯，請自己打賠率。","err");}
+  finally{reading=false;buildPads();renderLegs();calc();if(pending){pending=false;readNow();}}
+}
+// 複式: read only the cells for the chosen pairs
+async function readBox(){
+  if(!grids.length||S.mode!=="box")return;
+  if(reading){pending=true;return;}
+  reading=true;
+  try{
+    const todo=pairs().filter(([a,b])=>!cells[key(a,b)]);
+    for(let i=0;i<todo.length;i++){
+      if(S.mode!=="box")break;
+      const [a,b]=todo[i],k=key(a,b);
+      say(`讀緊 ${k} 嘅賠率（${i+1}/${todo.length}）…`);
+      cells[k]=await readCell(a,b);
+      const inp=document.getElementById("o-"+k);
+      if(inp&&!manual.has(k)&&cells[k].o){inp.value=fo(cells[k].o);inp.classList.remove("miss");}
+      calc();
+    }
+    if(S.mode==="box"&&pairs().length){
+      const P=pairs().map(([a,b])=>key(a,b));
+      const got=P.filter(k=>cells[k]&&cells[k].o).length;
+      const unread=P.filter(k=>cells[k]&&(cells[k].why==="unread"||cells[k].why==="none"));
+      const hidden=P.filter(k=>cells[k]&&cells[k].why==="hidden");
+      let m=`讀到 ${got}/${P.length} 個組合嘅賠率。`;
+      if(unread.length)m+=`${unread.join("、")} 讀唔到（可能已退出）。`;
+      if(hidden.length)m+=`${hidden.join("、")} 唔喺截圖入面，請加多張向右碌嘅截圖。`;
+      say(m+"請對一對截圖。",hidden.length?"err":"ok");
+    }
+  }catch(e){say("讀圖出錯，請自己打賠率。","err");}
+  finally{reading=false;renderLegs();calc();if(pending){pending=false;readNow();}}
+}
+
+$("#file").addEventListener("change",async()=>{
+  const files=[...$("#file").files].slice(0,3);$("#file").value="";if(!files.length)return;
+  const th=$("#thumbs");th.textContent="";
+  files.forEach(f=>{const t=document.createElement("img");t.alt="已揀截圖";t.src=URL.createObjectURL(f);th.appendChild(t);});
+  grids=[];cells={};manual.clear();S.odds={};buildPads();renderLegs();calc();
+  try{await getWorker();let bad=0;
+    for(let i=0;i<files.length;i++){say(`搵緊賠率表（${i+1}/${files.length}）…`);
+      const im=await loadImg(files[i]);const g=await findGrid(im);if(g)grids.push(g);else bad++;}
+    if(!grids.length){say("認唔到賠率表。請截成個連贏格仔表（要見到藍色邊），或者自己打賠率。","err");return;}
+    const n=maxN();
+    const need=S.mode==="box"?(S.box.length<2?"揀馬。":""):(S.banker===null?"揀膽。":"");
+    say(`已認到賠率表（${n} 匹馬）${bad?`，有 ${bad} 張圖認唔到`:""}。${need}`,"ok");
+    buildPads();readNow();
+  }catch(e){$("#bar").hidden=true;say(e.message==="noocr"?"讀圖模組載入唔到，請檢查網絡，或者自己打賠率。":"讀圖失敗，請自己打賠率。","err");}
+});
+
+buildPads();renderLegs();calc();
+})();
+</script>
+</body>
+</html>
